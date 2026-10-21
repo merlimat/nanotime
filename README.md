@@ -27,7 +27,7 @@ It is on Maven Central. With Maven:
 <dependency>
   <groupId>io.github.merlimat</groupId>
   <artifactId>nanotime</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
@@ -35,7 +35,7 @@ With Gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.merlimat:nanotime:0.1.0")
+    implementation("io.github.merlimat:nanotime:0.1.1")
 }
 ```
 
