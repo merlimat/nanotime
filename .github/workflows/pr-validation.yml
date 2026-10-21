@@ -1,0 +1,64 @@
+# Copyright 2026 Matteo Merli
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: PR validation
+
+on:
+  pull_request:
+  # Runs on main too, so the Gradle cache that PR builds read gets written
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }}, tests on Java ${{ matrix.java }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux x86_64 (rdtsc), Linux aarch64 (cntvct_el0), macOS aarch64 (cntvct_el0),
+        # and Windows, which falls back to System.nanoTime()
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        # Java 17 checks that the multi-release jar falls back to System.nanoTime()
+        java: [17, 26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Java ${{ matrix.java }} for the tests
+        id: test-java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      # Set up last, so it becomes JAVA_HOME. Compiling src/main/java22 needs Java 22+.
+      - name: Set up Java 26 for Gradle
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 26
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build and test
+        env:
+          TEST_JAVA_HOME: ${{ steps.test-java.outputs.path }}
+        run: ./gradlew build -PtestJava=${{ matrix.java }} "-Porg.gradle.java.installations.paths=$TEST_JAVA_HOME"
