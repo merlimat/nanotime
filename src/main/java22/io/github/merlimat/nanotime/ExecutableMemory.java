@@ -26,10 +26,14 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 
-/** Turns a few bytes of machine code into a function that can be called through FFM. Linux and macOS. */
+/**
+ * Turns a few bytes of machine code into a function that can be called through FFM. Linux, macOS
+ * and Windows.
+ */
 final class ExecutableMemory {
 
     private static final boolean MAC = System.getProperty("os.name").startsWith("Mac");
+    private static final boolean WINDOWS = System.getProperty("os.name").startsWith("Windows");
 
     private static final int PROT_READ = 1;
     private static final int PROT_WRITE = 2;
@@ -39,11 +43,19 @@ final class ExecutableMemory {
     // macOS csops(), from <sys/codesign.h>
     private static final int CS_OPS_STATUS = 0;
     private static final int CS_ENFORCEMENT = 0x1000;
+    // Windows VirtualAlloc() and VirtualProtect(), from <winnt.h>
+    private static final int MEM_COMMIT = 0x1000;
+    private static final int MEM_RESERVE = 0x2000;
+    private static final int PAGE_READWRITE = 0x04;
+    private static final int PAGE_EXECUTE_READ = 0x20;
 
     private ExecutableMemory() {}
 
     /** Copies machine code into a new page, then flips the page from writable to executable. */
     static MemorySegment map(MemorySegment code) throws Throwable {
+        if (WINDOWS) {
+            return mapOnWindows(code);
+        }
         Linker linker = Linker.nativeLinker();
         SymbolLookup libc = linker.defaultLookup();
         if (MAC) {
@@ -73,6 +85,44 @@ final class ExecutableMemory {
                     libc.find("sys_icache_invalidate").orElseThrow(),
                     FunctionDescriptor.ofVoid(ADDRESS, JAVA_LONG));
             icacheInvalidate.invokeExact(page, size);
+        }
+        return page;
+    }
+
+    /** Windows version of {@link #map}, with kernel32's VirtualAlloc() and VirtualProtect(). */
+    private static MemorySegment mapOnWindows(MemorySegment code) throws Throwable {
+        Linker linker = Linker.nativeLinker();
+        SymbolLookup kernel32 = SymbolLookup.libraryLookup("kernel32", Arena.global());
+        MethodHandle virtualAlloc = linker.downcallHandle(
+                kernel32.find("VirtualAlloc").orElseThrow(),
+                FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_LONG, JAVA_INT, JAVA_INT));
+        MethodHandle virtualProtect = linker.downcallHandle(
+                kernel32.find("VirtualProtect").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, JAVA_INT, ADDRESS));
+        MethodHandle getCurrentProcess = linker.downcallHandle(
+                kernel32.find("GetCurrentProcess").orElseThrow(), FunctionDescriptor.of(ADDRESS));
+        MethodHandle flushInstructionCache = linker.downcallHandle(
+                kernel32.find("FlushInstructionCache").orElseThrow(),
+                FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_LONG));
+
+        long size = code.byteSize();
+        MemorySegment page = (MemorySegment)
+                virtualAlloc.invokeExact(MemorySegment.NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (page.address() == 0) {
+            throw new IllegalStateException("VirtualAlloc failed");
+        }
+        page = page.reinterpret(size);
+        page.copyFrom(code);
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment oldProtect = arena.allocate(JAVA_INT);
+            if ((int) virtualProtect.invokeExact(page, size, PAGE_EXECUTE_READ, oldProtect) == 0) {
+                throw new IllegalStateException("VirtualProtect failed");
+            }
+        }
+        // Microsoft's rule for generated code: flush the instruction cache before running it
+        MemorySegment process = (MemorySegment) getCurrentProcess.invokeExact();
+        if ((int) flushInstructionCache.invokeExact(process, page, size) == 0) {
+            throw new IllegalStateException("FlushInstructionCache failed");
         }
         return page;
     }

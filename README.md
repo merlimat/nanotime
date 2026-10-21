@@ -43,7 +43,7 @@ warning.
 
 | Platform                  | Counter                | Scale                                           |
 |---------------------------|------------------------|-------------------------------------------------|
-| Linux x86_64              | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
+| Linux and Windows x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
 | Linux and macOS aarch64   | `mrs cntvct_el0`       | `cntfrq_el0`                                    |
 | macOS x86_64              | `mach_absolute_time()` | `mach_timebase_info()`                          |
 | Other, or Java 17 to 21   | `System.nanoTime()`    | n/a                                             |
@@ -56,6 +56,10 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
   The page is then called as a function. Linux x86_64 uses `rdtsc` only if
   `/proc/cpuinfo` reports `constant_tsc` and `nonstop_tsc`. Otherwise it falls back
   to `System.nanoTime()`.
+- **Windows x86_64:** the same, with kernel32's `VirtualAlloc` and `VirtualProtect`
+  instead of `mmap` and `mprotect`. There is no `/proc/cpuinfo`, so a small `cpuid`
+  stub reads the invariant TSC bit (leaf `0x80000007`, EDX bit 8) to decide whether
+  to use `rdtsc`.
 - **macOS:** both counters skip the global CAS that HotSpot's `System.nanoTime()`
   uses to enforce monotonicity. That CAS makes `nanoTime()` very slow when many
   threads call it at once. On x86_64, `mach_absolute_time()` is called directly from

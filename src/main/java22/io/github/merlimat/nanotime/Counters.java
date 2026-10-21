@@ -41,7 +41,7 @@ final class Counters {
         if (os.equals("Linux") && arch.equals("aarch64")) {
             return Aarch64Counter.create();
         }
-        if (os.equals("Linux") && arch.equals("amd64")) {
+        if ((os.equals("Linux") || os.startsWith("Windows")) && arch.equals("amd64")) {
             return Amd64Counter.create();
         }
         return null;

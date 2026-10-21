@@ -22,9 +22,10 @@ import java.time.Instant;
  * A faster alternative to {@link System#nanoTime()} that reads the CPU counter directly.
  *
  * <ul>
- *   <li>Linux x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc} and
- *       {@code nonstop_tsc}). The tick rate is calibrated against {@code System.nanoTime()} for
- *       about 100 ms when the class is initialized.
+ *   <li>Linux and Windows x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc}
+ *       and {@code nonstop_tsc} on Linux, the CPUID invariant TSC bit on Windows). The tick rate
+ *       is calibrated against {@code System.nanoTime()} for about 100 ms when the class is
+ *       initialized.
  *   <li>Linux and macOS aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}. On macOS it
  *       keeps counting while the system sleeps, unlike {@code System.nanoTime()}.
  *   <li>macOS x86_64: {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. Also
@@ -33,8 +34,8 @@ import java.time.Instant;
  *   <li>Anything else, including any platform on Java 17 to 21: {@code System.nanoTime()}.
  * </ul>
  *
- * <p>On Linux and macOS aarch64 the counter instructions are copied into an executable page at
- * startup, so there is no native library to ship. The counter is read through an FFM critical
+ * <p>On Linux, Windows and macOS aarch64 the counter instructions are copied into an executable
+ * page at startup, so there is no native library to ship. The counter is read through an FFM critical
  * downcall, which skips the Java-to-native thread state transition. On macOS, both counters also
  * skip the global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
  *

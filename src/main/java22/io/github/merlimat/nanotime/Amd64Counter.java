@@ -15,6 +15,7 @@
  */
 package io.github.merlimat.nanotime;
 
+import static java.lang.foreign.ValueLayout.JAVA_INT;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import java.io.IOException;
@@ -28,8 +29,9 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Linux x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc} and
- * {@code nonstop_tsc}). The tick rate is calibrated against {@code System.nanoTime()} for about
+ * Linux and Windows x86_64: {@code rdtsc}, only if the TSC is invariant. On Linux that means
+ * {@code constant_tsc} and {@code nonstop_tsc} in {@code /proc/cpuinfo}; on Windows, the invariant
+ * TSC bit from CPUID. The tick rate is calibrated against {@code System.nanoTime()} for about
  * 100 ms. With 20 ms the result was skewed by +3 to +12 ppm; with 100 ms it is within 1 ppm.
  */
 final class Amd64Counter {
@@ -37,6 +39,13 @@ final class Amd64Counter {
     // rdtsc; shl rdx, 32; or rax, rdx; ret
     private static final byte[] CODE = {
         0x0f, 0x31, 0x48, (byte) 0xc1, (byte) 0xe2, 0x20, 0x48, 0x09, (byte) 0xd0, (byte) 0xc3
+    };
+
+    // Takes the leaf in ecx (Windows x64 calling convention), returns edx:eax.
+    // push rbx; mov eax, ecx; xor ecx, ecx; cpuid; shl rdx, 32; or rax, rdx; pop rbx; ret
+    private static final byte[] WINDOWS_CPUID_CODE = {
+        0x53, (byte) 0x89, (byte) 0xc8, 0x31, (byte) 0xc9, 0x0f, (byte) 0xa2, 0x48,
+        (byte) 0xc1, (byte) 0xe2, 0x20, 0x48, 0x09, (byte) 0xd0, 0x5b, (byte) 0xc3
     };
 
     private static final long CALIBRATION_NANOS = 100_000_000;
@@ -54,7 +63,29 @@ final class Amd64Counter {
         return new Counter("rdtsc", ticks, calibrate(ticks));
     }
 
-    private static boolean invariantTsc() throws IOException {
+    static boolean invariantTsc() throws Throwable {
+        if (System.getProperty("os.name").startsWith("Windows")) {
+            return cpuidInvariantTsc();
+        }
+        return cpuinfoInvariantTsc();
+    }
+
+    /** Windows has no /proc/cpuinfo, so this asks the CPU directly: leaf 0x80000007, EDX bit 8. */
+    private static boolean cpuidInvariantTsc() throws Throwable {
+        MethodHandle cpuid = Linker.nativeLinker().downcallHandle(
+                ExecutableMemory.map(MemorySegment.ofArray(WINDOWS_CPUID_CODE)),
+                FunctionDescriptor.of(JAVA_LONG, JAVA_INT));
+        // EAX of leaf 0x80000000 is the highest extended leaf the CPU supports
+        long maxLeaf = (long) cpuid.invokeExact(0x80000000);
+        if (Integer.compareUnsigned((int) maxLeaf, 0x80000007) < 0) {
+            return false;
+        }
+        long powerManagement = (long) cpuid.invokeExact(0x80000007);
+        int edx = (int) (powerManagement >>> 32);
+        return (edx & (1 << 8)) != 0;
+    }
+
+    private static boolean cpuinfoInvariantTsc() throws IOException {
         try (Stream<String> lines = Files.lines(Path.of("/proc/cpuinfo"))) {
             return lines.filter(line -> line.startsWith("flags"))
                     .findFirst()
