@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
+import com.vanniktech.maven.publish.JavaLibrary
+import com.vanniktech.maven.publish.JavadocJar
+import com.vanniktech.maven.publish.SourcesJar
 import javax.inject.Inject
 
 plugins {
     `java-library`
-    `maven-publish`
+    id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
 group = "io.github.merlimat"
-version = "0.1.0-SNAPSHOT"
+// The release workflow passes the version from the git tag: v0.1.0 -> -PreleaseVersion=0.1.0
+version = providers.gradleProperty("releaseVersion").getOrElse("0.1.0-SNAPSHOT")
 description = "Fast alternative to System.nanoTime() that reads the CPU counter through FFM"
 
 repositories {
@@ -104,20 +108,41 @@ tasks.register<Jar>("jmhJar") {
     }
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
-            pom {
-                name = "nanotime"
-                description = project.description
-                licenses {
-                    license {
-                        name = "Apache License, Version 2.0"
-                        url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-                    }
-                }
+// Maven Central, through the Central Publisher Portal. Credentials and the signing key come from
+// the mavenCentralUsername, mavenCentralPassword and signingInMemoryKey* Gradle properties.
+mavenPublishing {
+    publishToMavenCentral()
+    signAllPublications()
+    configure(JavaLibrary(javadocJar = JavadocJar.Javadoc(), sourcesJar = SourcesJar.Sources()))
+    pom {
+        name = "nanotime"
+        description = project.description
+        inceptionYear = "2026"
+        url = "https://github.com/merlimat/nanotime"
+        licenses {
+            license {
+                name = "Apache License, Version 2.0"
+                url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
             }
         }
+        developers {
+            developer {
+                id = "merlimat"
+                name = "Matteo Merli"
+                url = "https://github.com/merlimat"
+            }
+        }
+        scm {
+            url = "https://github.com/merlimat/nanotime"
+            connection = "scm:git:https://github.com/merlimat/nanotime.git"
+            developerConnection = "scm:git:ssh://git@github.com/merlimat/nanotime.git"
+        }
+    }
+}
+
+// Like the jar, the sources jar holds the Java 22 classes' sources under META-INF/versions/22
+tasks.named<Jar>("sourcesJar") {
+    into("META-INF/versions/22") {
+        from(java22.allSource)
     }
 }
