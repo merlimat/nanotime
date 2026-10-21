@@ -145,6 +145,7 @@ from the Actions tab.
 | Neoverse-N2 runner | Neoverse-N2           | Linux aarch64, GitHub `ubuntu-24.04-arm`       |     4 | `arch_sys_counter` | 26.0.2.1 | `cntvct_el0`        |
 | EPYC 7763 runner   | AMD EPYC 7763 (Zen 3) | Linux x86_64, GitHub `ubuntu-latest`           |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
 | EPYC 7R13 pod      | AMD EPYC 7R13 (Zen 3) | Linux x86_64, AWS Kubernetes pod, no CPU limit |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
+| Windows runner     | AMD EPYC 7763 (Zen 3) | Windows x86_64, GitHub `windows-latest`        |     4 |                    | 26.0.2.1 | `rdtsc`             |
 
 ### `nanoTime()`, ns per call
 
@@ -156,6 +157,7 @@ from the Actions tab.
 | Neoverse-N2 runner |               31.2 |                  13.4 |                31.2 |                   13.5 |
 | EPYC 7763 runner   |               28.8 |                  11.2 |                30.7 |                   14.0 |
 | EPYC 7R13 pod      |               26.0 |                  10.2 |                28.7 |                   12.6 |
+| Windows runner     |               32.5 |                  11.3 |                36.3 |                   14.3 |
 
 ### `currentTimeMillis()`, ns per call
 
@@ -166,6 +168,7 @@ from the Actions tab.
 | M5 Pro VM          |               14.6 |                   1.9 |                15.8 |                    2.3 |
 | Neoverse-N2 runner |               31.2 |                  13.4 |                31.3 |                   13.5 |
 | EPYC 7763 runner   |               28.7 |                  11.4 |                31.2 |                   16.2 |
+| Windows runner     |                4.4 |                   4.4 |                 6.1 |                    6.1 |
 
 `currentTimeMillis()` was not measured on the EPYC 7R13 pod.
 
@@ -176,8 +179,9 @@ from the Actions tab.
 - **Linux x86_64:** both machines use clocksource `tsc`, so `System.nanoTime()`
   already runs in the vDSO without a syscall. That is its best case on Linux.
   With `kvm-clock`, or `xen` on older AWS instances, the gap should be larger.
-- **Windows** isn't listed: there is no counter for it yet, so `NanoClock` just
-  calls `System.nanoTime()` there.
+- **Windows:** `nanoTime()` uses `rdtsc`, as on Linux. `currentTimeMillis()` calls
+  `System.currentTimeMillis()` there, since that's already a ~4 ns read, so both
+  columns are the same call.
 - GitHub runners are shared VMs, so expect some noise between runs. The macOS
   runner had the widest error bars, up to ±15 ns.
 
