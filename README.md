@@ -83,6 +83,18 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 `./gradlew jmh` runs [NanoClockBenchmark](src/test/java/io/github/merlimat/nanotime/NanoClockBenchmark.java)
 (JMH, average time per call; "all cores" runs one thread per CPU).
 
+To run the benchmarks on another machine, build a self-contained jar, copy it
+there, and run it with `java -jar` (Java 22+ for the fast path). The output
+prints `NanoClock source: ...`, so you can see which counter is in use.
+
+```bash
+./gradlew jmhJar
+```
+
+```bash
+java -jar build/libs/nanotime-0.1.0-SNAPSHOT-jmh.jar
+```
+
 Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
 
 | Benchmark                     | ns/op |

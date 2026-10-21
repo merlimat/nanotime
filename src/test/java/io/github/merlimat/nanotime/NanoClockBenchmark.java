@@ -22,6 +22,9 @@ import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
 
@@ -30,7 +33,13 @@ import org.openjdk.jmh.annotations.Warmup;
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 @Fork(value = 1, jvmArgsAppend = "--enable-native-access=ALL-UNNAMED")
+@State(Scope.Benchmark)
 public class NanoClockBenchmark {
+
+    @Setup
+    public void printSource() {
+        System.out.println("NanoClock source: " + NanoClock.source());
+    }
 
     @Benchmark
     @Threads(1)

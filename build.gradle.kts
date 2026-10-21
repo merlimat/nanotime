@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import javax.inject.Inject
+
 plugins {
     `java-library`
     `maven-publish`
@@ -76,6 +78,25 @@ tasks.register<JavaExec>("jmh") {
     classpath = testRuntimeClasspath
     mainClass = "org.openjdk.jmh.Main"
     args("NanoClockBenchmark")
+}
+
+interface InjectedArchiveOperations {
+    @get:Inject val archiveOperations: ArchiveOperations
+}
+
+// Self-contained benchmark jar to run on another machine: java -jar nanotime-<version>-jmh.jar
+tasks.register<Jar>("jmhJar") {
+    description = "Builds a self-contained jar that runs the JMH benchmarks."
+    archiveClassifier = "jmh"
+    val archives = objects.newInstance<InjectedArchiveOperations>().archiveOperations
+    from(testRuntimeClasspath.elements.map { elements ->
+        elements.map { if (it.asFile.name.endsWith(".jar")) archives.zipTree(it.asFile) else it.asFile }
+    })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // The library classes come from its multi-release jar, so this jar must be multi-release too
+    manifest {
+        attributes("Main-Class" to "org.openjdk.jmh.Main", "Multi-Release" to "true")
+    }
 }
 
 publishing {
