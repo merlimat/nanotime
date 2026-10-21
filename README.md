@@ -72,7 +72,7 @@ JVM's restricted-method warning.
 
 ## Benchmarks
 
-`mvn test-compile exec:exec` runs [NanoClockBenchmark](src/test/java/io/github/merlimat/nanotime/NanoClockBenchmark.java)
+`./gradlew jmh` runs [NanoClockBenchmark](src/test/java/io/github/merlimat/nanotime/NanoClockBenchmark.java)
 (JMH, average time per call; "all cores" runs one thread per CPU).
 
 Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
@@ -99,7 +99,7 @@ benchmarked on real hardware.
 ## Build
 
 ```bash
-mvn verify
+./gradlew build
 ```
 
 ## License
