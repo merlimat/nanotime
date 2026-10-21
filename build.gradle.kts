@@ -71,6 +71,11 @@ tasks.test {
     useJUnitPlatform()
     classpath = testRuntimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // -PtestJava=17 runs the tests on another Java version, e.g. to check the System.nanoTime()
+    // fallback. The build itself still needs Java 22+ to compile src/main/java22.
+    providers.gradleProperty("testJava").orNull?.let { version ->
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(version) }
+    }
 }
 
 tasks.register<JavaExec>("jmh") {
