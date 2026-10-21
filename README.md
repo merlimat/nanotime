@@ -79,7 +79,10 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
   extrapolates from the anchor with the counter. Once the counter has moved 1 ms past
   the anchor, the next call reads the wall clock again, so there is no background
   thread. On macOS this also skips `gettimeofday()`, which ends up in the kernel and
-  slows down when many threads call it at once.
+  slows down when many threads call it at once. On Windows, `currentTimeMillis()`
+  just calls `System.currentTimeMillis()`. There it is a cheap read (about 5 ns) of a
+  time the OS updates at each timer tick, so extrapolating from `rdtsc` would be
+  slower, and would run behind it.
 - If setup fails for any reason, it logs a warning through `System.Logger` and falls
   back to `System.nanoTime()` and `System.currentTimeMillis()`.
 

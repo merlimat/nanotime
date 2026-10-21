@@ -60,6 +60,10 @@ public final class NanoClock {
     // Null when falling back to System.nanoTime()
     private static final MethodHandle TICKS;
     private static final long MULT;
+    // True when currentTimeMillis() just calls System.currentTimeMillis(): without a counter, and
+    // on Windows. There, System.currentTimeMillis() is a cheap read of a time the OS updates at each
+    // timer tick, so extrapolating from the counter would be slower and would run behind it.
+    private static final boolean SYSTEM_MILLIS;
 
     // How long currentTimeMillis() extrapolates from the counter before it reads the wall clock
     private static final long RESYNC_NANOS = 1_000_000;
@@ -89,6 +93,7 @@ public final class NanoClock {
             TICKS = null;
             MULT = 0;
         }
+        SYSTEM_MILLIS = TICKS == null || System.getProperty("os.name").startsWith("Windows");
         // Already stale, so the first currentTimeMillis() reads the wall clock
         anchor = new Anchor(0, nanoTime() - RESYNC_NANOS);
     }
@@ -118,11 +123,11 @@ public final class NanoClock {
      * the counter has moved 1 ms past the last read. So a change to the system clock is seen up to
      * 1 ms late, and so is time spent in system sleep if the counter stops during it. Right after
      * the wall clock is read again, the result can be 1 ms lower than the call before. Where
-     * {@link #nanoTime()} falls back to {@code System.nanoTime()}, this calls {@code
-     * System.currentTimeMillis()}.
+     * {@link #nanoTime()} falls back to {@code System.nanoTime()}, and on Windows, where it is
+     * already cheaper than the counter, this calls {@code System.currentTimeMillis()}.
      */
     public static long currentTimeMillis() {
-        if (TICKS == null) {
+        if (SYSTEM_MILLIS) {
             return System.currentTimeMillis();
         }
         Anchor a = anchor;
