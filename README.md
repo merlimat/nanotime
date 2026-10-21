@@ -140,7 +140,6 @@ from the Actions tab.
 | Machine                    | CPU                   | Environment                              | Cores | Clocksource        | JDK      | `NanoClock` counter |
 |----------------------------|-----------------------|------------------------------------------|------:|--------------------|----------|---------------------|
 | M5 Pro (macOS)             | Apple M5 Pro          | macOS 26.6                               |    18 |                    | 26.0.1   | `cntvct_el0`        |
-| M5 Pro VM (Linux)          | Apple M5 Pro          | Linux aarch64, Docker VM on the M5 Pro   |    10 | `arch_sys_counter` | 25       | `cntvct_el0`        |
 | Neoverse-N2 runner (Linux) | Neoverse-N2           | Linux aarch64, GitHub `ubuntu-24.04-arm` |     4 | `arch_sys_counter` | 26.0.2.1 | `cntvct_el0`        |
 | EPYC 7763 runner (Linux)   | AMD EPYC 7763 (Zen 3) | Linux x86_64, GitHub `ubuntu-latest`     |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
 | EPYC 7763 runner (Windows) | AMD EPYC 7763 (Zen 3) | Windows x86_64, GitHub `windows-latest`  |     4 |                    | 26.0.2.1 | `rdtsc`             |
@@ -150,7 +149,6 @@ from the Actions tab.
 | Machine                    | `System`, 1 thread | `NanoClock`, 1 thread | `System`, all cores | `NanoClock`, all cores |
 |----------------------------|-------------------:|----------------------:|--------------------:|-----------------------:|
 | M5 Pro (macOS)             |                8.1 |                   1.1 |               414.7 |                    1.6 |
-| M5 Pro VM (Linux)          |               17.1 |                   1.6 |                16.8 |                    1.8 |
 | Neoverse-N2 runner (Linux) |               31.2 |                  13.4 |                31.2 |                   13.5 |
 | EPYC 7763 runner (Linux)   |               28.8 |                  11.2 |                30.7 |                   14.0 |
 | EPYC 7763 runner (Windows) |               32.5 |                  11.3 |                36.3 |                   14.3 |
@@ -160,15 +158,14 @@ from the Actions tab.
 | Machine                    | `System`, 1 thread | `NanoClock`, 1 thread | `System`, all cores | `NanoClock`, all cores |
 |----------------------------|-------------------:|----------------------:|--------------------:|-----------------------:|
 | M5 Pro (macOS)             |               12.3 |                   1.6 |               345.3 |                    2.2 |
-| M5 Pro VM (Linux)          |               14.6 |                   1.9 |                15.8 |                    2.3 |
 | Neoverse-N2 runner (Linux) |               31.2 |                  13.4 |                31.3 |                   13.5 |
 | EPYC 7763 runner (Linux)   |               28.7 |                  11.4 |                31.2 |                   16.2 |
 | EPYC 7763 runner (Windows) |                4.4 |                   4.4 |                 6.1 |                    6.1 |
 
 - **macOS:** `System` slows down when many threads call it, because of HotSpot's
   global CAS. `NanoClock` doesn't.
-- **Linux aarch64:** the cost of reading the counter depends on the core: about
-  1.5 ns on Apple's, about 13 ns on Neoverse-N2.
+- **aarch64:** the cost of reading `cntvct_el0` depends on the core: about 1 ns
+  on the M5 Pro, about 13 ns on Neoverse-N2.
 - **Linux x86_64:** the runner uses clocksource `tsc`, so `System.nanoTime()`
   already runs in the vDSO without a syscall. That is its best case on Linux.
   With `kvm-clock`, or `xen` on older AWS instances, the gap should be larger.
