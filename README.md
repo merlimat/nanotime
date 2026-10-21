@@ -125,40 +125,54 @@ prints `NanoClock source: ...`, so you can see which counter is in use.
 java -jar build/libs/nanotime-0.1.0-SNAPSHOT-jmh.jar
 ```
 
-Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
+The GitHub runner results come from the Benchmark workflow, which you can start
+from the Actions tab.
 
-| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
-|-------------------|--------------------:|-----------------------:|
-| 1 thread          |                8.06 |                   1.10 |
-| 18 threads        |               414.7 |                   1.57 |
+### Machines
 
-| Benchmark (ns/op) | `System.currentTimeMillis()` | `NanoClock.currentTimeMillis()` |
-|-------------------|-----------------------------:|--------------------------------:|
-| 1 thread          |                        12.33 |                            1.63 |
-| 18 threads        |                        345.3 |                            2.19 |
+| Machine            | CPU                   | Environment                                    | Cores | Clocksource        | JDK      | `NanoClock` counter |
+|--------------------|-----------------------|------------------------------------------------|------:|--------------------|----------|---------------------|
+| M5 Pro             | Apple M5 Pro          | macOS 26.6                                     |    18 |                    | 26.0.1   | `cntvct_el0`        |
+| M1 runner          | Apple M1 (virtual)    | macOS, GitHub `macos-latest`                   |     3 |                    | 26.0.2.1 | `cntvct_el0`        |
+| M5 Pro VM          | Apple M5 Pro          | Linux aarch64, Docker VM on the M5 Pro         |    10 | `arch_sys_counter` | 25       | `cntvct_el0`        |
+| Neoverse-N2 runner | Neoverse-N2           | Linux aarch64, GitHub `ubuntu-24.04-arm`       |     4 | `arch_sys_counter` | 26.0.2.1 | `cntvct_el0`        |
+| EPYC 7763 runner   | AMD EPYC 7763 (Zen 3) | Linux x86_64, GitHub `ubuntu-latest`           |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
+| EPYC 7R13 pod      | AMD EPYC 7R13 (Zen 3) | Linux x86_64, AWS Kubernetes pod, no CPU limit |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
 
-Linux aarch64 (Docker VM on the same M5 Pro, Temurin 25, 10 cores, clocksource `arch_sys_counter`):
+### `nanoTime()`, ns per call
 
-| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
-|-------------------|--------------------:|-----------------------:|
-| 1 thread          |               17.08 |                   1.56 |
-| 10 threads        |               16.75 |                   1.79 |
+| Machine            | `System`, 1 thread | `NanoClock`, 1 thread | `System`, all cores | `NanoClock`, all cores |
+|--------------------|-------------------:|----------------------:|--------------------:|-----------------------:|
+| M5 Pro             |                8.1 |                   1.1 |               414.7 |                    1.6 |
+| M1 runner          |               29.2 |                   3.1 |               131.2 |                    3.0 |
+| M5 Pro VM          |               17.1 |                   1.6 |                16.8 |                    1.8 |
+| Neoverse-N2 runner |               31.2 |                  13.4 |                31.2 |                   13.5 |
+| EPYC 7763 runner   |               28.8 |                  11.2 |                30.7 |                   14.0 |
+| EPYC 7R13 pod      |               26.0 |                  10.2 |                28.7 |                   12.6 |
 
-| Benchmark (ns/op) | `System.currentTimeMillis()` | `NanoClock.currentTimeMillis()` |
-|-------------------|-----------------------------:|--------------------------------:|
-| 1 thread          |                        14.63 |                            1.87 |
-| 10 threads        |                        15.83 |                            2.27 |
+### `currentTimeMillis()`, ns per call
 
-Linux x86_64 (Kubernetes pod, 4 vCPUs, no CPU limit, Temurin 26.0.2.1, clocksource `tsc`):
+| Machine            | `System`, 1 thread | `NanoClock`, 1 thread | `System`, all cores | `NanoClock`, all cores |
+|--------------------|-------------------:|----------------------:|--------------------:|-----------------------:|
+| M5 Pro             |               12.3 |                   1.6 |               345.3 |                    2.2 |
+| M1 runner          |               27.1 |                   3.6 |                29.7 |                    3.3 |
+| M5 Pro VM          |               14.6 |                   1.9 |                15.8 |                    2.3 |
+| Neoverse-N2 runner |               31.2 |                  13.4 |                31.3 |                   13.5 |
+| EPYC 7763 runner   |               28.7 |                  11.4 |                31.2 |                   16.2 |
 
-| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
-|-------------------|--------------------:|-----------------------:|
-| 1 thread          |               26.03 |                  10.22 |
-| 4 threads         |               28.69 |                  12.63 |
+`currentTimeMillis()` was not measured on the EPYC 7R13 pod.
 
-With clocksource `tsc`, `System.nanoTime()` already runs in the vDSO without a
-syscall, so this is its best case on Linux. With `kvm-clock`, or `xen` on older
-AWS instances, the gap should be larger.
+- **macOS:** `System` slows down when many threads call it, because of HotSpot's
+  global CAS. `NanoClock` doesn't.
+- **Linux aarch64:** the cost of reading the counter depends on the core: about
+  1.5 ns on Apple's, about 13 ns on Neoverse-N2.
+- **Linux x86_64:** both machines use clocksource `tsc`, so `System.nanoTime()`
+  already runs in the vDSO without a syscall. That is its best case on Linux.
+  With `kvm-clock`, or `xen` on older AWS instances, the gap should be larger.
+- **Windows** isn't listed: there is no counter for it yet, so `NanoClock` just
+  calls `System.nanoTime()` there.
+- GitHub runners are shared VMs, so expect some noise between runs. The macOS
+  runner had the widest error bars, up to ±15 ns.
 
 ## Build
 
