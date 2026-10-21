@@ -68,6 +68,11 @@ tasks.jar {
     }
 }
 
+// The published Javadoc covers only the public API, NanoClock. Everything else is package-private.
+tasks.javadoc {
+    options.memberLevel = JavadocMemberLevel.PUBLIC
+}
+
 // Tests and benchmarks load the library from the jar, so the JVM picks the classes for its version
 val testRuntimeClasspath = files(tasks.jar) + (sourceSets.test.get().runtimeClasspath - sourceSets.main.get().output)
 

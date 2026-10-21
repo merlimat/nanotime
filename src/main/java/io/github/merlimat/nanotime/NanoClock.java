@@ -19,7 +19,20 @@ import java.lang.invoke.MethodHandle;
 import java.time.Instant;
 
 /**
- * A faster alternative to {@link System#nanoTime()} that reads the CPU counter directly.
+ * Faster alternatives to {@link System#nanoTime()} and {@link System#currentTimeMillis()}, which
+ * read the CPU counter directly.
+ *
+ * <pre>{@code
+ * long start = NanoClock.nanoTime();
+ * doWork();
+ * long elapsedNanos = NanoClock.nanoTime() - start;
+ *
+ * long timestampMillis = NanoClock.currentTimeMillis();
+ * }</pre>
+ *
+ * <h2>Counters</h2>
+ *
+ * <p>{@link #source()} returns the counter in use:
  *
  * <ul>
  *   <li>Linux and Windows x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc}
@@ -35,25 +48,28 @@ import java.time.Instant;
  * </ul>
  *
  * <p>On Linux, Windows and macOS aarch64 the counter instructions are copied into an executable
- * page at startup, so there is no native library to ship. The counter is read through an FFM critical
- * downcall, which skips the Java-to-native thread state transition. On macOS, both counters also
- * skip the global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
+ * page at startup, so there is no native library to ship. The counter is read through an FFM
+ * critical downcall, which skips the Java-to-native thread state transition. On macOS, both
+ * counters also skip the global CAS that HotSpot does in {@code System.nanoTime()} to enforce
+ * monotonicity.
  *
- * <p>As with {@code System.nanoTime()}, only differences between values are meaningful. When the
- * class is initialized, the counter is offset to match {@code System.nanoTime()}, so values from
- * the two can be compared. They drift apart afterwards: on x86_64 by the error of the calibrated
- * tick rate, on Linux by the NTP frequency corrections that {@code System.nanoTime()} follows and
- * the counter does not, and on macOS aarch64 by the time the system spends asleep. The counter
- * reads are not serializing, so the CPU may execute them a few cycles before or after the
- * surrounding code.
+ * <h2>Comparing with System.nanoTime()</h2>
  *
- * <p>{@link #currentTimeMillis()} is a faster alternative to {@link System#currentTimeMillis()}.
- * It extrapolates the wall clock from the counter, and reads the wall clock again every
- * millisecond.
+ * <p>When the class is initialized, the counter is offset to match {@code System.nanoTime()}, so
+ * values from the two can be compared. They drift apart afterwards: on x86_64 by the error of the
+ * calibrated tick rate, on Linux by the NTP frequency corrections that {@code System.nanoTime()}
+ * follows and the counter does not, and on macOS aarch64 by the time the system spends asleep.
+ *
+ * <h2>Setup</h2>
  *
  * <p>Runs on Java 17+, but the counters need the FFM API from Java 22. The jar is a multi-release
  * jar, so Java 22+ picks up the counter classes automatically. On Java 22+, run with
  * {@code --enable-native-access=ALL-UNNAMED} to avoid the JVM's restricted method warning.
+ *
+ * <p>The first call initializes the class, which takes a few tens of ms, plus about 100 ms on
+ * x86_64 for the calibration. Call {@link #nanoTime()} once at startup to keep that cost off the
+ * hot path. If setup fails, a warning is logged through {@link System.Logger} and both methods
+ * fall back to {@code System.nanoTime()} and {@code System.currentTimeMillis()}.
  */
 public final class NanoClock {
 
@@ -109,8 +125,13 @@ public final class NanoClock {
     private NanoClock() {}
 
     /**
-     * Returns the current value of the counter, in nanoseconds, offset to start out at {@link
-     * System#nanoTime()}.
+     * Returns the current value of the counter, in nanoseconds. As with {@link System#nanoTime()},
+     * only the difference between two values is meaningful.
+     *
+     * <p>The counter read is not serializing, so the CPU may execute it a few cycles before or
+     * after the surrounding code.
+     *
+     * @return the counter, in nanoseconds, offset to start out at {@code System.nanoTime()}
      */
     public static long nanoTime() {
         if (TICKS == null) {
@@ -160,6 +181,8 @@ public final class NanoClock {
      * the wall clock is read again, the result can be 1 ms lower than the call before. Where
      * {@link #nanoTime()} falls back to {@code System.nanoTime()}, and on Windows, where it is
      * already cheaper than the counter, this calls {@code System.currentTimeMillis()}.
+     *
+     * @return the current time, in milliseconds since 1970-01-01T00:00:00Z
      */
     public static long currentTimeMillis() {
         if (SYSTEM_MILLIS) {
@@ -190,8 +213,10 @@ public final class NanoClock {
     }
 
     /**
-     * Returns the counter behind {@link #nanoTime()}: {@code rdtsc}, {@code cntvct_el0},
-     * {@code mach_absolute_time} or {@code System.nanoTime}.
+     * Returns the name of the counter behind {@link #nanoTime()}.
+     *
+     * @return {@code "rdtsc"}, {@code "cntvct_el0"}, {@code "mach_absolute_time"} or
+     *     {@code "System.nanoTime"}
      */
     public static String source() {
         return SOURCE;
