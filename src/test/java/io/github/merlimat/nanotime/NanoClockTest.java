@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -100,6 +101,8 @@ class NanoClockTest {
     private static void checkCurrentTimeMillis() throws InterruptedException {
         long samples = 0;
         long behind = 0;
+        long offset = wallClockOffset();
+        long skipUntil = System.nanoTime();
         for (int i = 0; i < 20; i++) {
             // Spin across a few resyncs, then sleep so that the anchor goes stale
             long end = System.nanoTime() + 10_000_000;
@@ -107,6 +110,16 @@ class NanoClockTest {
                 long before = System.currentTimeMillis();
                 long now = NanoClock.currentTimeMillis();
                 long after = System.currentTimeMillis();
+                // NanoClock sees a step of the wall clock (e.g. from time sync) up to 1 ms late, so
+                // skip the samples until it has caught up
+                long previousOffset = offset;
+                offset = wallClockOffset();
+                if (Math.abs(offset - previousOffset) > 100_000) {
+                    skipUntil = System.nanoTime() + 2_000_000;
+                }
+                if (System.nanoTime() < skipUntil) {
+                    continue;
+                }
                 // The two clocks can round to different milliseconds near a boundary
                 assertTrue(now >= before - 1 && now <= after + 1,
                         () -> now + " is not between " + before + " and " + after);
@@ -119,5 +132,14 @@ class NanoClockTest {
         }
         // Without extrapolation from the counter, half the samples would be a millisecond behind
         assertTrue(behind < samples / 100, behind + " of " + samples + " samples were behind");
+    }
+
+    /**
+     * The wall clock minus {@code System.nanoTime()}, in nanoseconds, which moves when the wall
+     * clock is stepped.
+     */
+    private static long wallClockOffset() {
+        Instant now = Instant.now();
+        return now.getEpochSecond() * 1_000_000_000 + now.getNano() - System.nanoTime();
     }
 }
