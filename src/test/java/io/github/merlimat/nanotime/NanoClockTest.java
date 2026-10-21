@@ -77,6 +77,16 @@ class NanoClockTest {
     }
 
     @Test
+    void alignedWithSystemNanoTime() {
+        long before = System.nanoTime();
+        long now = NanoClock.nanoTime();
+        long after = System.nanoTime();
+        // Allows for the drift since the class was initialized, a few seconds ago at most
+        assertTrue(now >= before - 1_000_000 && now <= after + 1_000_000,
+                () -> now + " is not between " + before + " and " + after);
+    }
+
+    @Test
     void neverGoesBackwardsOnOneThread() {
         long previous = NanoClock.nanoTime();
         for (int i = 0; i < 10_000_000; i++) {

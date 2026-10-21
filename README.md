@@ -107,7 +107,13 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 ## Caveats
 
 - As with `System.nanoTime()`, only differences between `NanoClock.nanoTime()` values
-  mean anything. Never mix them with `System.nanoTime()` values.
+  mean anything. When the class is initialized, the counter is offset to match
+  `System.nanoTime()`, so the two can be compared, but they drift apart afterwards:
+  on x86_64 by the error of the calibrated tick rate (±1 ppm is about 3.6 ms per
+  hour), on Linux by the NTP frequency corrections that `System.nanoTime()` follows
+  and the counter does not, and on macOS aarch64 by the time the Mac spends asleep.
+  Don't subtract a `System.nanoTime()` value from a `NanoClock.nanoTime()` value to
+  time anything long or precise.
 - `NanoClock.currentTimeMillis()` sees a change to the system clock up to 1 ms late.
   With `mach_absolute_time()`, which stops while the Mac sleeps, the same goes for
   waking up. Right after it reads the wall clock again, it can return 1 ms less than

@@ -39,9 +39,13 @@ import java.time.Instant;
  * downcall, which skips the Java-to-native thread state transition. On macOS, both counters also
  * skip the global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
  *
- * <p>As with {@code System.nanoTime()}, only differences between values are meaningful. Values
- * cannot be compared with values from {@code System.nanoTime()}. The counter reads are not
- * serializing, so the CPU may execute them a few cycles before or after the surrounding code.
+ * <p>As with {@code System.nanoTime()}, only differences between values are meaningful. When the
+ * class is initialized, the counter is offset to match {@code System.nanoTime()}, so values from
+ * the two can be compared. They drift apart afterwards: on x86_64 by the error of the calibrated
+ * tick rate, on Linux by the NTP frequency corrections that {@code System.nanoTime()} follows and
+ * the counter does not, and on macOS aarch64 by the time the system spends asleep. The counter
+ * reads are not serializing, so the CPU may execute them a few cycles before or after the
+ * surrounding code.
  *
  * <p>{@link #currentTimeMillis()} is a faster alternative to {@link System#currentTimeMillis()}.
  * It extrapolates the wall clock from the counter, and reads the wall clock again every
@@ -60,6 +64,8 @@ public final class NanoClock {
     // Null when falling back to System.nanoTime()
     private static final MethodHandle TICKS;
     private static final long MULT;
+    // Added to the counter so that nanoTime() starts out at System.nanoTime()
+    private static final long OFFSET;
     // True when currentTimeMillis() just calls System.currentTimeMillis(): without a counter, and
     // on Windows. There, System.currentTimeMillis() is a cheap read of a time the OS updates at each
     // timer tick, so extrapolating from the counter would be slower and would run behind it.
@@ -88,10 +94,12 @@ public final class NanoClock {
             SOURCE = counter.source();
             TICKS = counter.ticks();
             MULT = Math.round(counter.nanosPerTick() * (1L << SHIFT));
+            OFFSET = systemNanoTimeOffset();
         } else {
             SOURCE = "System.nanoTime";
             TICKS = null;
             MULT = 0;
+            OFFSET = 0;
         }
         SYSTEM_MILLIS = TICKS == null || System.getProperty("os.name").startsWith("Windows");
         // Already stale, so the first currentTimeMillis() reads the wall clock
@@ -100,11 +108,19 @@ public final class NanoClock {
 
     private NanoClock() {}
 
-    /** Returns the current value of the counter, in nanoseconds. */
+    /**
+     * Returns the current value of the counter, in nanoseconds, offset to start out at {@link
+     * System#nanoTime()}.
+     */
     public static long nanoTime() {
         if (TICKS == null) {
             return System.nanoTime();
         }
+        return counterNanos() + OFFSET;
+    }
+
+    /** Returns the counter in nanoseconds, without the offset. */
+    private static long counterNanos() {
         long ticks;
         try {
             ticks = (long) TICKS.invokeExact();
@@ -113,6 +129,25 @@ public final class NanoClock {
         }
         // 128-bit (ticks * MULT) >> SHIFT
         return Math.multiplyHigh(ticks, MULT) << (64 - SHIFT) | (ticks * MULT) >>> SHIFT;
+    }
+
+    /**
+     * Returns System.nanoTime() minus the counter, from the attempt where the two System.nanoTime()
+     * reads around the counter were closest together, so a preemption between them cannot skew it.
+     */
+    private static long systemNanoTimeOffset() {
+        long offset = 0;
+        long bestGap = Long.MAX_VALUE;
+        for (int i = 0; i < 1000; i++) {
+            long before = System.nanoTime();
+            long counter = counterNanos();
+            long after = System.nanoTime();
+            if (after - before < bestGap) {
+                bestGap = after - before;
+                offset = before + bestGap / 2 - counter;
+            }
+        }
+        return offset;
     }
 
     /**
