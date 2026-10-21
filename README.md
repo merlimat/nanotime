@@ -112,24 +112,24 @@ java -jar build/libs/nanotime-0.1.0-SNAPSHOT-jmh.jar
 
 Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
 
-| Bench (ns/op) | System | NanoClock |
-|---------------|-------:|----------:|
-| 1 thread      |   8.06 |      1.10 |
-| 18 threads    |  414.7 |      1.57 |
+| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
+|-------------------|--------------------:|-----------------------:|
+| 1 thread          |                8.06 |                   1.10 |
+| 18 threads        |               414.7 |                   1.57 |
 
 Linux aarch64 (Docker VM on the same M5 Pro, Temurin 25, 10 cores, clocksource `arch_sys_counter`):
 
-| Bench (ns/op) | System | NanoClock |
-|---------------|-------:|----------:|
-| 1 thread      |  17.08 |      1.56 |
-| 10 threads    |  16.75 |      1.79 |
+| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
+|-------------------|--------------------:|-----------------------:|
+| 1 thread          |               17.08 |                   1.56 |
+| 10 threads        |               16.75 |                   1.79 |
 
 Linux x86_64 (Kubernetes pod, 4 vCPUs, no CPU limit, Temurin 26.0.2.1, clocksource `tsc`):
 
-| Bench (ns/op) | System | NanoClock |
-|---------------|-------:|----------:|
-| 1 thread      |  26.03 |     10.22 |
-| 4 threads     |  28.69 |     12.63 |
+| Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
+|-------------------|--------------------:|-----------------------:|
+| 1 thread          |               26.03 |                  10.22 |
+| 4 threads         |               28.69 |                  12.63 |
 
 With clocksource `tsc`, `System.nanoTime()` already runs in the vDSO without a
 syscall, so this is its best case on Linux. With `kvm-clock`, or `xen` on older
