@@ -23,7 +23,7 @@ import java.lang.invoke.MethodHandle;
  * <ul>
  *   <li>Linux x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc} and
  *       {@code nonstop_tsc}). The tick rate is calibrated against {@code System.nanoTime()} for
- *       about 20 ms when the class is initialized.
+ *       about 100 ms when the class is initialized.
  *   <li>Linux aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}.
  *   <li>macOS: {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. This skips the
  *       global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.

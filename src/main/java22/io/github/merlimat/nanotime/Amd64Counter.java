@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 /**
  * Linux x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc} and
  * {@code nonstop_tsc}). The tick rate is calibrated against {@code System.nanoTime()} for about
- * 20 ms.
+ * 100 ms. With 20 ms the result was skewed by +3 to +12 ppm; with 100 ms it is within 1 ppm.
  */
 final class Amd64Counter {
 
@@ -39,7 +39,7 @@ final class Amd64Counter {
         0x0f, 0x31, 0x48, (byte) 0xc1, (byte) 0xe2, 0x20, 0x48, 0x09, (byte) 0xd0, (byte) 0xc3
     };
 
-    private static final long CALIBRATION_NANOS = 20_000_000;
+    private static final long CALIBRATION_NANOS = 100_000_000;
 
     private Amd64Counter() {}
 

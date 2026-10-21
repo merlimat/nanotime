@@ -37,11 +37,11 @@ warning.
 
 ## How it works
 
-| Platform      | Counter                | Scale                                          |
-|---------------|------------------------|------------------------------------------------|
-| Linux x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (20 ms) |
-| Linux aarch64 | `mrs cntvct_el0`       | `cntfrq_el0`                                   |
-| macOS         | `mach_absolute_time()` | `mach_timebase_info()`                         |
+| Platform      | Counter                | Scale                                           |
+|---------------|------------------------|-------------------------------------------------|
+| Linux x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
+| Linux aarch64 | `mrs cntvct_el0`       | `cntfrq_el0`                                    |
+| macOS         | `mach_absolute_time()` | `mach_timebase_info()`                          |
 | Other, or Java 17 to 21 | `System.nanoTime()` | n/a                                 |
 
 The jar is a multi-release jar. The base classes target Java 17, and the FFM counters
@@ -66,14 +66,13 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 - Counter reads are not serializing (no `lfence`/`isb`), so the CPU may run them a
   few cycles early or late relative to the surrounding code. That is fine for
   latency histograms, but not for bracketing a handful of instructions.
-- On x86_64 the tick rate comes from a 20 ms calibration against
-  `System.nanoTime()`, so the scale is slightly off. Checked against an exact
-  reference on macOS, the calibration code is within about 1 ppm. On a 4 vCPU
-  x86_64 Kubernetes node it measured +5 to +6 ppm, which is about 5 ns of error
-  per millisecond measured.
-- The first call initializes the class, which takes a few tens of ms. This covers
-  FFM setup, plus calibration on x86_64. Call `NanoClock.nanoTime()` once at
-  startup to keep that cost off the hot path.
+- On x86_64 the tick rate comes from a 100 ms calibration against
+  `System.nanoTime()`. On a 4 vCPU x86_64 Kubernetes node, the scale was within
+  ±1 ppm across 5 runs, about 1 ns of error per millisecond measured. A 20 ms
+  window was skewed by +3 to +12 ppm across 10 runs, which is why it is 100 ms.
+- The first call initializes the class. That takes a few tens of ms for FFM
+  setup, and on x86_64 about 100 ms more for the calibration. Call
+  `NanoClock.nanoTime()` once at startup to keep that cost off the hot path.
 - The Java 22 classes are only used when the library is loaded from its jar, not
   from an unpacked classes directory. If you shade it into a fat jar, keep the
   `Multi-Release: true` manifest attribute and the `META-INF/versions/22` entries.
