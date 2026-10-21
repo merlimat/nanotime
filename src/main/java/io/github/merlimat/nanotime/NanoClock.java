@@ -24,15 +24,18 @@ import java.lang.invoke.MethodHandle;
  *   <li>Linux x86_64: {@code rdtsc}, only if the TSC is invariant ({@code constant_tsc} and
  *       {@code nonstop_tsc}). The tick rate is calibrated against {@code System.nanoTime()} for
  *       about 100 ms when the class is initialized.
- *   <li>Linux aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}.
- *   <li>macOS: {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. This skips the
- *       global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
+ *   <li>Linux and macOS aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}. On macOS it
+ *       keeps counting while the system sleeps, unlike {@code System.nanoTime()}.
+ *   <li>macOS x86_64: {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. Also
+ *       used on macOS aarch64 when the JVM runs with the hardened runtime but without the
+ *       {@code com.apple.security.cs.allow-unsigned-executable-memory} entitlement.
  *   <li>Anything else, including any platform on Java 17 to 21: {@code System.nanoTime()}.
  * </ul>
  *
- * <p>On Linux the counter instructions are copied into an executable page at startup, so there is
- * no native library to ship. The counter is read through an FFM critical downcall, which skips the
- * Java-to-native thread state transition.
+ * <p>On Linux and macOS aarch64 the counter instructions are copied into an executable page at
+ * startup, so there is no native library to ship. The counter is read through an FFM critical
+ * downcall, which skips the Java-to-native thread state transition. On macOS, both counters also
+ * skip the global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
  *
  * <p>As with {@code System.nanoTime()}, only differences between values are meaningful. Values
  * cannot be compared with values from {@code System.nanoTime()}. The counter reads are not

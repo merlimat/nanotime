@@ -22,7 +22,7 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 
-/** Linux aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}. */
+/** Linux and macOS aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}. */
 final class Aarch64Counter {
 
     // At offset 0: mrs x0, cntvct_el0; ret

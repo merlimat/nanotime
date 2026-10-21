@@ -27,6 +27,14 @@ final class Counters {
     static Counter detect() throws Throwable {
         String os = System.getProperty("os.name");
         String arch = System.getProperty("os.arch");
+        if (os.startsWith("Mac") && arch.equals("aarch64")) {
+            try {
+                return Aarch64Counter.create();
+            } catch (Throwable t) {
+                System.getLogger(NanoClock.class.getName())
+                        .log(System.Logger.Level.DEBUG, "Falling back to mach_absolute_time()", t);
+            }
+        }
         if (os.startsWith("Mac")) {
             return MacCounter.create();
         }

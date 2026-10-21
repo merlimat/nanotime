@@ -27,9 +27,9 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 
 /**
- * macOS, on both arm64 and x86_64: {@code mach_absolute_time()}, scaled by
- * {@code mach_timebase_info()}. This skips the global CAS that HotSpot does in
- * {@code System.nanoTime()} to enforce monotonicity.
+ * macOS x86_64, and arm64 when the process is not allowed to run unsigned code:
+ * {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. This skips the global CAS
+ * that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
  */
 final class MacCounter {
 

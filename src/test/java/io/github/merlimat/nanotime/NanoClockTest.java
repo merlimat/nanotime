@@ -34,7 +34,7 @@ class NanoClockTest {
         String arch = System.getProperty("os.arch");
         String expected = "System.nanoTime";
         if (os.startsWith("Mac")) {
-            expected = "mach_absolute_time";
+            expected = arch.equals("aarch64") ? "cntvct_el0" : "mach_absolute_time";
         } else if (os.equals("Linux") && arch.equals("aarch64")) {
             expected = "cntvct_el0";
         } else if (os.equals("Linux") && arch.equals("amd64")) {

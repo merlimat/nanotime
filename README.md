@@ -37,23 +37,32 @@ warning.
 
 ## How it works
 
-| Platform      | Counter                | Scale                                           |
-|---------------|------------------------|-------------------------------------------------|
-| Linux x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
-| Linux aarch64 | `mrs cntvct_el0`       | `cntfrq_el0`                                    |
-| macOS         | `mach_absolute_time()` | `mach_timebase_info()`                          |
-| Other, or Java 17 to 21 | `System.nanoTime()` | n/a                                 |
+| Platform                  | Counter                | Scale                                           |
+|---------------------------|------------------------|-------------------------------------------------|
+| Linux x86_64              | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
+| Linux and macOS aarch64   | `mrs cntvct_el0`       | `cntfrq_el0`                                    |
+| macOS x86_64              | `mach_absolute_time()` | `mach_timebase_info()`                          |
+| Other, or Java 17 to 21   | `System.nanoTime()`    | n/a                                             |
 
 The jar is a multi-release jar. The base classes target Java 17, and the FFM counters
 are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 
-- **Linux:** the few instruction bytes are written into an `mmap`'d page, which is
-  then flipped from writable to executable with `mprotect`. The page is then called
-  as a function. x86_64 uses `rdtsc` only if `/proc/cpuinfo` reports
-  `constant_tsc` and `nonstop_tsc`. Otherwise it falls back to `System.nanoTime()`.
-- **macOS:** `mach_absolute_time()` is called directly from libSystem. This skips the
-  global CAS that HotSpot's `System.nanoTime()` uses to enforce monotonicity. That
-  CAS makes `nanoTime()` very slow when many threads call it at once.
+- **Linux and macOS aarch64:** the few instruction bytes are written into an
+  `mmap`'d page, which is then flipped from writable to executable with `mprotect`.
+  The page is then called as a function. Linux x86_64 uses `rdtsc` only if
+  `/proc/cpuinfo` reports `constant_tsc` and `nonstop_tsc`. Otherwise it falls back
+  to `System.nanoTime()`.
+- **macOS:** both counters skip the global CAS that HotSpot's `System.nanoTime()`
+  uses to enforce monotonicity. That CAS makes `nanoTime()` very slow when many
+  threads call it at once. On x86_64, `mach_absolute_time()` is called directly from
+  libSystem.
+- **macOS code signing:** the page only runs if the JVM is allowed to run unsigned
+  code. Under the hardened runtime that takes the
+  `com.apple.security.cs.allow-unsigned-executable-memory` entitlement, which
+  Homebrew's OpenJDK signs `java` with. Without it, `mprotect` still succeeds but the
+  kernel kills the process when the page runs. So `NanoClock` first checks the
+  process's code-signing flags with `csops`, and uses `mach_absolute_time()` if
+  unsigned code is not allowed.
 - Ticks are converted to nanoseconds with 128-bit fixed-point math
   (`Math.multiplyHigh`), with no division or floating point.
 - If setup fails for any reason, it logs a warning through `System.Logger` and falls
@@ -76,9 +85,13 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 - The Java 22 classes are only used when the library is loaded from its jar, not
   from an unpacked classes directory. If you shade it into a fat jar, keep the
   `Multi-Release: true` manifest attribute and the `META-INF/versions/22` entries.
-- Resolution is the counter's: 41.67 ns on Apple Silicon (24 MHz, the same as
-  `System.nanoTime()`), and `1 / cntfrq_el0` on Linux ARM, which can be as low as
-  a few tens of MHz on some servers.
+- On macOS aarch64, `cntvct_el0` keeps counting while the Mac sleeps.
+  `System.nanoTime()` and `mach_absolute_time()` do not, so an interval that spans a
+  system sleep includes the time asleep.
+- Resolution is the counter's: 41.67 ns on Apple Silicon, the same as
+  `System.nanoTime()`. The M5 reports `cntfrq_el0` as 1 GHz, but the counter moves
+  in steps of 41 or 42 ticks, so it is still 24 MHz underneath. On Linux ARM it is
+  `1 / cntfrq_el0`, which can be as low as a few tens of MHz on some servers.
 
 ## Benchmarks
 
@@ -101,10 +114,10 @@ Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
 
 | Benchmark                     | ns/op |
 |-------------------------------|------:|
-| `System.nanoTime()`, 1 thread |  9.36 |
-| `NanoClock.nanoTime()`, 1 thread |  5.71 |
-| `System.nanoTime()`, 18 threads | 436.5 |
-| `NanoClock.nanoTime()`, 18 threads |  7.77 |
+| `System.nanoTime()`, 1 thread |  8.06 |
+| `NanoClock.nanoTime()`, 1 thread |  1.10 |
+| `System.nanoTime()`, 18 threads | 414.7 |
+| `NanoClock.nanoTime()`, 18 threads |  1.57 |
 
 Linux aarch64 (Docker VM on the same M5 Pro, Temurin 25, 10 cores, clocksource `arch_sys_counter`):
 
