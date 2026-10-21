@@ -17,8 +17,9 @@
 # nanotime
 
 A tiny, dependency-free Java library with a faster alternative to `System.nanoTime()`
-for measuring latencies. It reads the CPU counter directly through an FFM
-critical downcall. No native library is shipped: the jar is pure Java, ~12 KB.
+for measuring latencies, and to `System.currentTimeMillis()` for timestamps. It reads
+the CPU counter directly through an FFM critical downcall. No native library is
+shipped: the jar is pure Java, ~15 KB.
 
 ```java
 import io.github.merlimat.nanotime.NanoClock;
@@ -27,11 +28,14 @@ long start = NanoClock.nanoTime();
 doWork();
 long elapsedNanos = NanoClock.nanoTime() - start;
 
+long timestampMillis = NanoClock.currentTimeMillis();
+
 NanoClock.source(); // "rdtsc", "cntvct_el0", "mach_absolute_time" or "System.nanoTime"
 ```
 
 Runs on Java 17+. The fast path needs Java 22+, because it uses the FFM API. On
-Java 17 to 21, `NanoClock.nanoTime()` simply calls `System.nanoTime()`. On Java 22+,
+Java 17 to 21, `NanoClock.nanoTime()` and `NanoClock.currentTimeMillis()` simply call
+`System.nanoTime()` and `System.currentTimeMillis()`. On Java 22+,
 run with `--enable-native-access=ALL-UNNAMED` to avoid the JVM's restricted-method
 warning.
 
@@ -65,13 +69,24 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
   unsigned code is not allowed.
 - Ticks are converted to nanoseconds with 128-bit fixed-point math
   (`Math.multiplyHigh`), with no division or floating point.
+- **`currentTimeMillis()`:** the wall clock is not a counter, because the OS adjusts
+  it through NTP and when the clock is set. So `currentTimeMillis()` keeps an anchor:
+  a wall clock time from `Instant.now()`, and the counter value when it was read. It
+  extrapolates from the anchor with the counter. Once the counter has moved 1 ms past
+  the anchor, the next call reads the wall clock again, so there is no background
+  thread. On macOS this also skips `gettimeofday()`, which ends up in the kernel and
+  slows down when many threads call it at once.
 - If setup fails for any reason, it logs a warning through `System.Logger` and falls
-  back to `System.nanoTime()`.
+  back to `System.nanoTime()` and `System.currentTimeMillis()`.
 
 ## Caveats
 
-- As with `System.nanoTime()`, only differences between values mean anything. Never
-  mix `NanoClock` values with `System.nanoTime()` values.
+- As with `System.nanoTime()`, only differences between `NanoClock.nanoTime()` values
+  mean anything. Never mix them with `System.nanoTime()` values.
+- `NanoClock.currentTimeMillis()` sees a change to the system clock up to 1 ms late.
+  With `mach_absolute_time()`, which stops while the Mac sleeps, the same goes for
+  waking up. Right after it reads the wall clock again, it can return 1 ms less than
+  the call before.
 - Counter reads are not serializing (no `lfence`/`isb`), so the CPU may run them a
   few cycles early or late relative to the surrounding code. That is fine for
   latency histograms, but not for bracketing a handful of instructions.
@@ -117,12 +132,22 @@ Apple M5 Pro, macOS 26.6, JDK 26.0.1, 18 cores:
 | 1 thread          |                8.06 |                   1.10 |
 | 18 threads        |               414.7 |                   1.57 |
 
+| Benchmark (ns/op) | `System.currentTimeMillis()` | `NanoClock.currentTimeMillis()` |
+|-------------------|-----------------------------:|--------------------------------:|
+| 1 thread          |                        12.33 |                            1.63 |
+| 18 threads        |                        345.3 |                            2.19 |
+
 Linux aarch64 (Docker VM on the same M5 Pro, Temurin 25, 10 cores, clocksource `arch_sys_counter`):
 
 | Benchmark (ns/op) | `System.nanoTime()` | `NanoClock.nanoTime()` |
 |-------------------|--------------------:|-----------------------:|
 | 1 thread          |               17.08 |                   1.56 |
 | 10 threads        |               16.75 |                   1.79 |
+
+| Benchmark (ns/op) | `System.currentTimeMillis()` | `NanoClock.currentTimeMillis()` |
+|-------------------|-----------------------------:|--------------------------------:|
+| 1 thread          |                        14.63 |                            1.87 |
+| 10 threads        |                        15.83 |                            2.27 |
 
 Linux x86_64 (Kubernetes pod, 4 vCPUs, no CPU limit, Temurin 26.0.2.1, clocksource `tsc`):
 

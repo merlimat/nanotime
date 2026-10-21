@@ -64,4 +64,28 @@ public class NanoClockBenchmark {
     public long nanoClockAllCores() {
         return NanoClock.nanoTime();
     }
+
+    @Benchmark
+    @Threads(1)
+    public long systemCurrentTimeMillis() {
+        return System.currentTimeMillis();
+    }
+
+    @Benchmark
+    @Threads(1)
+    public long nanoClockCurrentTimeMillis() {
+        return NanoClock.currentTimeMillis();
+    }
+
+    @Benchmark
+    @Threads(Threads.MAX)
+    public long systemCurrentTimeMillisAllCores() {
+        return System.currentTimeMillis();
+    }
+
+    @Benchmark
+    @Threads(Threads.MAX)
+    public long nanoClockCurrentTimeMillisAllCores() {
+        return NanoClock.currentTimeMillis();
+    }
 }
