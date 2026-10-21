@@ -180,40 +180,6 @@ from the Actions tab.
 ./gradlew build
 ```
 
-## Releasing
-
-Pushing a tag like `v0.1.0` runs the [Release workflow](.github/workflows/release.yml).
-It takes the version from the tag, builds and tests it, publishes the signed
-artifacts to Maven Central, and creates a GitHub release with the jars.
-
-```bash
-git tag v0.1.0
-```
-
-```bash
-git push origin v0.1.0
-```
-
-Tags must look like `v1.2.3` or `v1.2.3-rc.1`. Once the Central Portal validates
-the upload, it is published automatically, and a Maven Central release can't be
-deleted or replaced.
-
-The workflow needs these repository secrets (Settings → Secrets and variables →
-Actions):
-
-| Secret                   | Value                                                            |
-|--------------------------|------------------------------------------------------------------|
-| `MAVEN_CENTRAL_USERNAME` | Username of a [Central Portal user token][token]                 |
-| `MAVEN_CENTRAL_PASSWORD` | Password of that token                                           |
-| `SIGNING_KEY`            | ASCII-armored private GPG key: `gpg --export-secret-keys --armor <key id>` |
-| `SIGNING_KEY_PASSWORD`   | The key's passphrase                                             |
-
-The `io.github.merlimat` namespace must be verified on the Central Portal, and the
-public key must be on a keyserver such as `keys.openpgp.org`, so Central can check
-the signatures.
-
-[token]: https://central.sonatype.org/publish/generate-portal-token/
-
 ## License
 
 Apache License, Version 2.0. See [LICENSE](LICENSE).
