@@ -16,6 +16,7 @@
 package io.github.merlimat.nanotime;
 
 import java.lang.invoke.MethodHandle;
+import java.time.Instant;
 
 /**
  * A faster alternative to {@link System#nanoTime()} that reads the CPU counter directly.
@@ -41,6 +42,10 @@ import java.lang.invoke.MethodHandle;
  * cannot be compared with values from {@code System.nanoTime()}. The counter reads are not
  * serializing, so the CPU may execute them a few cycles before or after the surrounding code.
  *
+ * <p>{@link #currentTimeMillis()} is a faster alternative to {@link System#currentTimeMillis()}.
+ * It extrapolates the wall clock from the counter, and reads the wall clock again every
+ * millisecond.
+ *
  * <p>Runs on Java 17+, but the counters need the FFM API from Java 22. The jar is a multi-release
  * jar, so Java 22+ picks up the counter classes automatically. On Java 22+, run with
  * {@code --enable-native-access=ALL-UNNAMED} to avoid the JVM's restricted method warning.
@@ -54,6 +59,16 @@ public final class NanoClock {
     // Null when falling back to System.nanoTime()
     private static final MethodHandle TICKS;
     private static final long MULT;
+
+    // How long currentTimeMillis() extrapolates from the counter before it reads the wall clock
+    private static final long RESYNC_NANOS = 1_000_000;
+    // Longest counter interval around a wall clock read that is accepted as an anchor
+    private static final long MAX_ANCHOR_NANOS = 10_000;
+
+    /** A wall clock time, in nanoseconds since the epoch, and the counter value at that time. */
+    private record Anchor(long epochNanos, long nanoTime) {}
+
+    private static volatile Anchor anchor;
 
     static {
         Counter counter;
@@ -73,6 +88,8 @@ public final class NanoClock {
             TICKS = null;
             MULT = 0;
         }
+        // Already stale, so the first currentTimeMillis() reads the wall clock
+        anchor = new Anchor(0, nanoTime() - RESYNC_NANOS);
     }
 
     private NanoClock() {}
@@ -90,6 +107,45 @@ public final class NanoClock {
         }
         // 128-bit (ticks * MULT) >> SHIFT
         return Math.multiplyHigh(ticks, MULT) << (64 - SHIFT) | (ticks * MULT) >>> SHIFT;
+    }
+
+    /**
+     * Returns the current time in milliseconds since the epoch, like {@link
+     * System#currentTimeMillis()}.
+     *
+     * <p>The time is extrapolated from {@link #nanoTime()}, and the wall clock is read again once
+     * the counter has moved 1 ms past the last read. So a change to the system clock is seen up to
+     * 1 ms late, and so is time spent in system sleep if the counter stops during it. Right after
+     * the wall clock is read again, the result can be 1 ms lower than the call before. Where
+     * {@link #nanoTime()} falls back to {@code System.nanoTime()}, this calls {@code
+     * System.currentTimeMillis()}.
+     */
+    public static long currentTimeMillis() {
+        if (TICKS == null) {
+            return System.currentTimeMillis();
+        }
+        Anchor a = anchor;
+        long elapsed = nanoTime() - a.nanoTime();
+        // The counter on another core can be slightly behind the anchor, so only a large gap either
+        // way means that the anchor is stale
+        if (Math.abs(elapsed) >= RESYNC_NANOS) {
+            return resync();
+        }
+        return (a.epochNanos() + elapsed) / 1_000_000;
+    }
+
+    /** Reads the wall clock, and makes it the new anchor if the read was not interrupted. */
+    private static long resync() {
+        long start = nanoTime();
+        Instant now = Instant.now();
+        long end = nanoTime();
+        long epochNanos = now.getEpochSecond() * 1_000_000_000 + now.getNano();
+        // A thread preempted or stopped at a safepoint between the reads would make every thread
+        // extrapolate from a wrong anchor until the next resync
+        if (end - start <= MAX_ANCHOR_NANOS) {
+            anchor = new Anchor(epochNanos, start + (end - start) / 2);
+        }
+        return epochNanos / 1_000_000;
     }
 
     /**

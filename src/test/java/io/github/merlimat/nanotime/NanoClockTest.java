@@ -20,6 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 class NanoClockTest {
@@ -65,5 +70,54 @@ class NanoClockTest {
             long now = NanoClock.nanoTime();
             assertTrue(now >= previous, () -> "went from " + previous + " to " + now);
         }
+    }
+
+    @Test
+    void currentTimeMillisTracksSystemClock() throws Exception {
+        checkCurrentTimeMillis();
+    }
+
+    @Test
+    void currentTimeMillisTracksSystemClockOnAllCores() throws Exception {
+        int threads = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(executor.submit(() -> {
+                    checkCurrentTimeMillis();
+                    return null;
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    private static void checkCurrentTimeMillis() throws InterruptedException {
+        long samples = 0;
+        long behind = 0;
+        for (int i = 0; i < 20; i++) {
+            // Spin across a few resyncs, then sleep so that the anchor goes stale
+            long end = System.nanoTime() + 10_000_000;
+            while (System.nanoTime() < end) {
+                long before = System.currentTimeMillis();
+                long now = NanoClock.currentTimeMillis();
+                long after = System.currentTimeMillis();
+                // The two clocks can round to different milliseconds near a boundary
+                assertTrue(now >= before - 1 && now <= after + 1,
+                        () -> now + " is not between " + before + " and " + after);
+                samples++;
+                if (now < before) {
+                    behind++;
+                }
+            }
+            Thread.sleep(10);
+        }
+        // Without extrapolation from the counter, half the samples would be a millisecond behind
+        assertTrue(behind < samples / 100, behind + " of " + samples + " samples were behind");
     }
 }
