@@ -21,6 +21,24 @@ for measuring latencies, and to `System.currentTimeMillis()` for timestamps. It 
 the CPU counter directly through an FFM critical downcall. No native library is
 shipped: the jar is pure Java, ~15 KB.
 
+It is on Maven Central. With Maven:
+
+```xml
+<dependency>
+  <groupId>io.github.merlimat</groupId>
+  <artifactId>nanotime</artifactId>
+  <version>0.1.0</version>
+</dependency>
+```
+
+With Gradle:
+
+```kotlin
+dependencies {
+    implementation("io.github.merlimat:nanotime:0.1.0")
+}
+```
+
 ```java
 import io.github.merlimat.nanotime.NanoClock;
 
