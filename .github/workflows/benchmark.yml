@@ -1,0 +1,95 @@
+# Copyright 2026 Matteo Merli
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      jmh-args:
+        description: Extra JMH arguments, e.g. "-wi 1 -i 3" or a benchmark name regex
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux amd64
+            os: ubuntu-latest
+          - name: Linux arm64
+            os: ubuntu-24.04-arm
+          - name: macOS arm64
+            os: macos-latest
+          - name: Windows amd64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 26
+      - uses: gradle/actions/setup-gradle@v6
+      - run: ./gradlew jmhJar
+      - name: Describe the machine
+        env:
+          MACHINE: ${{ matrix.name }}
+        run: |
+          {
+            echo "### $MACHINE"
+            echo
+            case "$RUNNER_OS" in
+              Linux)
+                echo "- CPU: $(lscpu | sed -n 's/^Model name: *//p' | head -1), $(nproc) cores"
+                echo "- Clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource)"
+                flags=$(grep -o -w -e constant_tsc -e nonstop_tsc /proc/cpuinfo | sort -u | tr '\n' ' ' || true)
+                if [ -n "$flags" ]; then
+                  echo "- TSC flags: $flags"
+                fi
+                ;;
+              macOS)
+                echo "- CPU: $(sysctl -n machdep.cpu.brand_string), $(sysctl -n hw.ncpu) cores"
+                ;;
+              Windows)
+                cpu=$(powershell -NoProfile -Command '(Get-CimInstance Win32_Processor).Name' | tr -d '\r')
+                echo "- CPU: $cpu, $NUMBER_OF_PROCESSORS cores"
+                ;;
+            esac
+            echo "- Java: $(java -version 2>&1 | head -1)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Run the benchmarks
+        env:
+          JMH_ARGS: ${{ inputs.jmh-args }}
+        run: |
+          # JMH_ARGS is split on spaces on purpose, so it can hold several arguments
+          # shellcheck disable=SC2086
+          java -jar build/libs/nanotime-*-jmh.jar $JMH_ARGS | tee jmh.txt
+          {
+            echo "- $(grep -m1 -o 'NanoClock source: [A-Za-z_.0-9]*' jmh.txt)"
+            echo
+            echo '```'
+            sed -n '/^Benchmark /,$p' jmh.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
