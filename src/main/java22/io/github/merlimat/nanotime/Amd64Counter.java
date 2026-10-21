@@ -66,6 +66,9 @@ final class Amd64Counter {
 
     /** Measures nanoseconds per tick against System.nanoTime(). */
     private static double calibrate(MethodHandle ticks) throws Throwable {
+        // Throwaway sample, so that both samples below run warmed-up code. Otherwise the cold first
+        // sample skews the result by a few ppm.
+        sample(ticks);
         long[] start = sample(ticks);
         while (System.nanoTime() - start[0] < CALIBRATION_NANOS) {
             Thread.onSpinWait();

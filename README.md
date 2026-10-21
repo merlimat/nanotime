@@ -66,8 +66,11 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 - Counter reads are not serializing (no `lfence`/`isb`), so the CPU may run them a
   few cycles early or late relative to the surrounding code. That is fine for
   latency histograms, but not for bracketing a handful of instructions.
-- On x86_64 the tick rate comes from a 20 ms calibration, so expect a scale
-  error of a few ppm.
+- On x86_64 the tick rate comes from a 20 ms calibration against
+  `System.nanoTime()`, so the scale is slightly off. Checked against an exact
+  reference on macOS, the calibration code is within about 1 ppm. On a 4 vCPU
+  x86_64 Kubernetes node, an earlier version without the warm-up sample measured
+  +12 ppm. Even that is only about 12 ns of error per millisecond measured.
 - The first call initializes the class, which takes a few tens of ms. This covers
   FFM setup, plus calibration on x86_64. Call `NanoClock.nanoTime()` once at
   startup to keep that cost off the hot path.
