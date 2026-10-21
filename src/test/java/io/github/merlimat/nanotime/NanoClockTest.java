@@ -18,6 +18,7 @@ package io.github.merlimat.nanotime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -45,6 +46,17 @@ class NanoClockTest {
         } else if (os.equals("Linux") && arch.equals("amd64")) {
             String cpuinfo = Files.readString(Path.of("/proc/cpuinfo"));
             if (cpuinfo.contains(" constant_tsc ") && cpuinfo.contains(" nonstop_tsc ")) {
+                expected = "rdtsc";
+            }
+        } else if (os.startsWith("Windows") && arch.equals("amd64")) {
+            // No /proc/cpuinfo on Windows, so use the library's CPUID check. Amd64Counter is only in
+            // the jar's Java 22 classes, so it is not on the test compile classpath.
+            Method invariantTsc = Class.forName("io.github.merlimat.nanotime.Amd64Counter")
+                    .getDeclaredMethod("invariantTsc");
+            invariantTsc.setAccessible(true);
+            boolean invariant = (boolean) invariantTsc.invoke(null);
+            System.out.println("CPUID invariant TSC: " + invariant);
+            if (invariant) {
                 expected = "rdtsc";
             }
         }

@@ -43,7 +43,7 @@ warning.
 
 | Platform                  | Counter                | Scale                                           |
 |---------------------------|------------------------|-------------------------------------------------|
-| Linux x86_64              | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
+| Linux and Windows x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (100 ms) |
 | Linux and macOS aarch64   | `mrs cntvct_el0`       | `cntfrq_el0`                                    |
 | macOS x86_64              | `mach_absolute_time()` | `mach_timebase_info()`                          |
 | Other, or Java 17 to 21   | `System.nanoTime()`    | n/a                                             |
@@ -56,6 +56,10 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
   The page is then called as a function. Linux x86_64 uses `rdtsc` only if
   `/proc/cpuinfo` reports `constant_tsc` and `nonstop_tsc`. Otherwise it falls back
   to `System.nanoTime()`.
+- **Windows x86_64:** the same, with kernel32's `VirtualAlloc` and `VirtualProtect`
+  instead of `mmap` and `mprotect`. There is no `/proc/cpuinfo`, so a small `cpuid`
+  stub reads the invariant TSC bit (leaf `0x80000007`, EDX bit 8) to decide whether
+  to use `rdtsc`.
 - **macOS:** both counters skip the global CAS that HotSpot's `System.nanoTime()`
   uses to enforce monotonicity. That CAS makes `nanoTime()` very slow when many
   threads call it at once. On x86_64, `mach_absolute_time()` is called directly from
@@ -75,7 +79,10 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
   extrapolates from the anchor with the counter. Once the counter has moved 1 ms past
   the anchor, the next call reads the wall clock again, so there is no background
   thread. On macOS this also skips `gettimeofday()`, which ends up in the kernel and
-  slows down when many threads call it at once.
+  slows down when many threads call it at once. On Windows, `currentTimeMillis()`
+  just calls `System.currentTimeMillis()`. There it is a cheap read (about 5 ns) of a
+  time the OS updates at each timer tick, so extrapolating from `rdtsc` would be
+  slower, and would run behind it.
 - If setup fails for any reason, it logs a warning through `System.Logger` and falls
   back to `System.nanoTime()` and `System.currentTimeMillis()`.
 
@@ -138,6 +145,7 @@ from the Actions tab.
 | Neoverse-N2 runner | Neoverse-N2           | Linux aarch64, GitHub `ubuntu-24.04-arm`       |     4 | `arch_sys_counter` | 26.0.2.1 | `cntvct_el0`        |
 | EPYC 7763 runner   | AMD EPYC 7763 (Zen 3) | Linux x86_64, GitHub `ubuntu-latest`           |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
 | EPYC 7R13 pod      | AMD EPYC 7R13 (Zen 3) | Linux x86_64, AWS Kubernetes pod, no CPU limit |     4 | `tsc`              | 26.0.2.1 | `rdtsc`             |
+| Windows runner     | AMD EPYC 7763 (Zen 3) | Windows x86_64, GitHub `windows-latest`        |     4 |                    | 26.0.2.1 | `rdtsc`             |
 
 ### `nanoTime()`, ns per call
 
@@ -149,6 +157,7 @@ from the Actions tab.
 | Neoverse-N2 runner |               31.2 |                  13.4 |                31.2 |                   13.5 |
 | EPYC 7763 runner   |               28.8 |                  11.2 |                30.7 |                   14.0 |
 | EPYC 7R13 pod      |               26.0 |                  10.2 |                28.7 |                   12.6 |
+| Windows runner     |               32.5 |                  11.3 |                36.3 |                   14.3 |
 
 ### `currentTimeMillis()`, ns per call
 
@@ -159,6 +168,7 @@ from the Actions tab.
 | M5 Pro VM          |               14.6 |                   1.9 |                15.8 |                    2.3 |
 | Neoverse-N2 runner |               31.2 |                  13.4 |                31.3 |                   13.5 |
 | EPYC 7763 runner   |               28.7 |                  11.4 |                31.2 |                   16.2 |
+| Windows runner     |                4.4 |                   4.4 |                 6.1 |                    6.1 |
 
 `currentTimeMillis()` was not measured on the EPYC 7R13 pod.
 
@@ -169,8 +179,9 @@ from the Actions tab.
 - **Linux x86_64:** both machines use clocksource `tsc`, so `System.nanoTime()`
   already runs in the vDSO without a syscall. That is its best case on Linux.
   With `kvm-clock`, or `xen` on older AWS instances, the gap should be larger.
-- **Windows** isn't listed: there is no counter for it yet, so `NanoClock` just
-  calls `System.nanoTime()` there.
+- **Windows:** `nanoTime()` uses `rdtsc`, as on Linux. `currentTimeMillis()` calls
+  `System.currentTimeMillis()` there, since that's already a ~4 ns read, so both
+  columns are the same call.
 - GitHub runners are shared VMs, so expect some noise between runs. The macOS
   runner had the widest error bars, up to ±15 ns.
 
