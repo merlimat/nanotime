@@ -69,8 +69,8 @@ are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 - On x86_64 the tick rate comes from a 20 ms calibration against
   `System.nanoTime()`, so the scale is slightly off. Checked against an exact
   reference on macOS, the calibration code is within about 1 ppm. On a 4 vCPU
-  x86_64 Kubernetes node, an earlier version without the warm-up sample measured
-  +12 ppm. Even that is only about 12 ns of error per millisecond measured.
+  x86_64 Kubernetes node it measured +5 to +6 ppm, which is about 5 ns of error
+  per millisecond measured.
 - The first call initializes the class, which takes a few tens of ms. This covers
   FFM setup, plus calibration on x86_64. Call `NanoClock.nanoTime()` once at
   startup to keep that cost off the hot path.
