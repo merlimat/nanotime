@@ -113,8 +113,18 @@ Linux aarch64 (Docker VM on the same M5 Pro, Temurin 25, 10 cores, clocksource `
 | `System.nanoTime()`, 10 threads | 16.75 |
 | `NanoClock.nanoTime()`, 10 threads |  1.79 |
 
-The x86_64 path has been functionally tested under emulation, but not yet
-benchmarked on real hardware.
+Linux x86_64 (Kubernetes pod, 4 vCPUs, no CPU limit, Temurin 26.0.2.1, clocksource `tsc`):
+
+| Benchmark                     | ns/op |
+|-------------------------------|------:|
+| `System.nanoTime()`, 1 thread | 26.03 |
+| `NanoClock.nanoTime()`, 1 thread | 10.22 |
+| `System.nanoTime()`, 4 threads | 28.69 |
+| `NanoClock.nanoTime()`, 4 threads | 12.63 |
+
+With clocksource `tsc`, `System.nanoTime()` already runs in the vDSO without a
+syscall, so this is its best case on Linux. With `kvm-clock`, or `xen` on older
+AWS instances, the gap should be larger.
 
 ## Build
 
