@@ -27,7 +27,7 @@ import java.lang.invoke.MethodHandle;
  *   <li>Linux aarch64: {@code cntvct_el0}, scaled by {@code cntfrq_el0}.
  *   <li>macOS: {@code mach_absolute_time()}, scaled by {@code mach_timebase_info()}. This skips the
  *       global CAS that HotSpot does in {@code System.nanoTime()} to enforce monotonicity.
- *   <li>Anything else: {@code System.nanoTime()}.
+ *   <li>Anything else, including any platform on Java 17 to 21: {@code System.nanoTime()}.
  * </ul>
  *
  * <p>On Linux the counter instructions are copied into an executable page at startup, so there is
@@ -38,8 +38,9 @@ import java.lang.invoke.MethodHandle;
  * cannot be compared with values from {@code System.nanoTime()}. The counter reads are not
  * serializing, so the CPU may execute them a few cycles before or after the surrounding code.
  *
- * <p>Run with {@code --enable-native-access=ALL-UNNAMED} to avoid the JVM's restricted method
- * warning.
+ * <p>Runs on Java 17+, but the counters need the FFM API from Java 22. The jar is a multi-release
+ * jar, so Java 22+ picks up the counter classes automatically. On Java 22+, run with
+ * {@code --enable-native-access=ALL-UNNAMED} to avoid the JVM's restricted method warning.
  */
 public final class NanoClock {
 
@@ -54,7 +55,7 @@ public final class NanoClock {
     static {
         Counter counter;
         try {
-            counter = detect();
+            counter = Counters.detect();
         } catch (Throwable t) {
             System.getLogger(NanoClock.class.getName())
                     .log(System.Logger.Level.WARNING, "Falling back to System.nanoTime()", t);
@@ -96,19 +97,4 @@ public final class NanoClock {
         return SOURCE;
     }
 
-    /** Returns the counter for this platform, or null if there is none. */
-    private static Counter detect() throws Throwable {
-        String os = System.getProperty("os.name");
-        String arch = System.getProperty("os.arch");
-        if (os.startsWith("Mac")) {
-            return MacCounter.create();
-        }
-        if (os.equals("Linux") && arch.equals("aarch64")) {
-            return Aarch64Counter.create();
-        }
-        if (os.equals("Linux") && arch.equals("amd64")) {
-            return Amd64Counter.create();
-        }
-        return null;
-    }
 }

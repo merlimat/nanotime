@@ -26,6 +26,10 @@ class NanoClockTest {
 
     @Test
     void usesHardwareCounterWhereAvailable() throws Exception {
+        if (Runtime.version().feature() < 22) {
+            assertEquals("System.nanoTime", NanoClock.source());
+            return;
+        }
         String os = System.getProperty("os.name");
         String arch = System.getProperty("os.arch");
         String expected = "System.nanoTime";

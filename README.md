@@ -18,7 +18,7 @@
 
 A tiny, dependency-free Java library with a faster alternative to `System.nanoTime()`
 for measuring latencies. It reads the CPU counter directly through an FFM
-critical downcall. No native library is shipped: the jar is pure Java, ~8 KB.
+critical downcall. No native library is shipped: the jar is pure Java, ~12 KB.
 
 ```java
 import io.github.merlimat.nanotime.NanoClock;
@@ -30,8 +30,10 @@ long elapsedNanos = NanoClock.nanoTime() - start;
 NanoClock.source(); // "rdtsc", "cntvct_el0", "mach_absolute_time" or "System.nanoTime"
 ```
 
-Requires JDK 22+. Run with `--enable-native-access=ALL-UNNAMED` to avoid the
-JVM's restricted-method warning.
+Runs on Java 17+. The fast path needs Java 22+, because it uses the FFM API. On
+Java 17 to 21, `NanoClock.nanoTime()` simply calls `System.nanoTime()`. On Java 22+,
+run with `--enable-native-access=ALL-UNNAMED` to avoid the JVM's restricted-method
+warning.
 
 ## How it works
 
@@ -40,7 +42,10 @@ JVM's restricted-method warning.
 | Linux x86_64  | `rdtsc`                | calibrated against `System.nanoTime()` (20 ms) |
 | Linux aarch64 | `mrs cntvct_el0`       | `cntfrq_el0`                                   |
 | macOS         | `mach_absolute_time()` | `mach_timebase_info()`                         |
-| Other         | `System.nanoTime()`    | n/a                                            |
+| Other, or Java 17 to 21 | `System.nanoTime()` | n/a                                 |
+
+The jar is a multi-release jar. The base classes target Java 17, and the FFM counters
+are under `META-INF/versions/22`, so Java 22+ picks them up automatically.
 
 - **Linux:** the few instruction bytes are written into an `mmap`'d page, which is
   then flipped from writable to executable with `mprotect`. The page is then called
@@ -66,6 +71,9 @@ JVM's restricted-method warning.
 - The first call initializes the class, which takes a few tens of ms. This covers
   FFM setup, plus calibration on x86_64. Call `NanoClock.nanoTime()` once at
   startup to keep that cost off the hot path.
+- The Java 22 classes are only used when the library is loaded from its jar, not
+  from an unpacked classes directory. If you shade it into a fat jar, keep the
+  `Multi-Release: true` manifest attribute and the `META-INF/versions/22` entries.
 - Resolution is the counter's: 41.67 ns on Apple Silicon (24 MHz, the same as
   `System.nanoTime()`), and `1 / cntfrq_el0` on Linux ARM, which can be as low as
   a few tens of MHz on some servers.

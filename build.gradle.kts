@@ -27,9 +27,16 @@ repositories {
     mavenCentral()
 }
 
+// Multi-release jar: the base classes target Java 17 and fall back to System.nanoTime(), while
+// the FFM counters in src/main/java22 go under META-INF/versions/22.
+val java22 = sourceSets.create("java22") {
+    java.setSrcDirs(listOf("src/main/java22"))
+}
+
 val jmhVersion = "1.37"
 
 dependencies {
+    "java22Implementation"(files(sourceSets.main.get().output.classesDirs))
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -38,18 +45,35 @@ dependencies {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release = 22
+    options.release = 17
     options.encoding = "UTF-8"
 }
 
+tasks.named<JavaCompile>(java22.compileJavaTaskName) {
+    options.release = 22
+}
+
+tasks.jar {
+    into("META-INF/versions/22") {
+        from(java22.output)
+    }
+    manifest {
+        attributes("Multi-Release" to "true")
+    }
+}
+
+// Tests and benchmarks load the library from the jar, so the JVM picks the classes for its version
+val testRuntimeClasspath = files(tasks.jar) + (sourceSets.test.get().runtimeClasspath - sourceSets.main.get().output)
+
 tasks.test {
     useJUnitPlatform()
+    classpath = testRuntimeClasspath
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.register<JavaExec>("jmh") {
     description = "Runs the JMH benchmarks."
-    classpath = sourceSets.test.get().runtimeClasspath
+    classpath = testRuntimeClasspath
     mainClass = "org.openjdk.jmh.Main"
     args("NanoClockBenchmark")
 }
